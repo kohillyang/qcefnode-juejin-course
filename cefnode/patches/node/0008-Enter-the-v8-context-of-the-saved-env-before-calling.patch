@@ -1,0 +1,26 @@
+From a88add60c7582e2bda3ff21bf4abe3832c8687c1 Mon Sep 17 00:00:00 2001
+From: kohill <kohillyang@126.com>
+Date: Wed, 2 Nov 2022 22:49:09 +0800
+Subject: [PATCH 8/8] Enter the v8 context of the saved env before calling the
+ complete cb.
+
+---
+ src/node_api.cc | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/node_api.cc b/src/node_api.cc
+index 9357198216..2588bed6c0 100644
+--- a/src/node_api.cc
++++ b/src/node_api.cc
+@@ -1081,7 +1081,7 @@ class Work : public node::AsyncResource, public node::ThreadPoolWork {
+     // Establish a handle scope here so that every callback doesn't have to.
+     // Also it is needed for the exception-handling below.
+     v8::HandleScope scope(_env->isolate);
+-
++    v8::Context::Scope context_scope(_env->context());
+     CallbackScope callback_scope(this);
+ 
+     _env->CallIntoModule([&](napi_env env) {
+-- 
+2.36.1.windows.1
+

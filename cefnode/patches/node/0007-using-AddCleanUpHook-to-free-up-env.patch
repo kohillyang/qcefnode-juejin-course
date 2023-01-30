@@ -1,0 +1,56 @@
+From b19f40b84d1f2b33023ee82d01174ea547d8afc7 Mon Sep 17 00:00:00 2001
+From: kohill <kohillyang@126.com>
+Date: Mon, 17 Oct 2022 14:18:16 +0800
+Subject: [PATCH 7/8] using AddCleanUpHook to free up env
+
+---
+ src/node_api.cc | 18 ++++++++----------
+ src/node_api.h  |  2 --
+ 2 files changed, 8 insertions(+), 12 deletions(-)
+
+diff --git a/src/node_api.cc b/src/node_api.cc
+index 3251c36730..9357198216 100644
+--- a/src/node_api.cc
++++ b/src/node_api.cc
+@@ -1311,16 +1311,14 @@ napi_status napi_create_env(napi_env* env, const char* module_filename) {
+   v8::Isolate* isolate = v8::Isolate::TryGetCurrent();
+   if (isolate) {
+     v8::Local<v8::Context> ctx = isolate->GetCurrentContext();
+-      if (!ctx.IsEmpty()) {
+-        *env = new node_napi_env__(ctx, module_filename);
+-        return napi_status::napi_ok;
+-      }
++    if (!ctx.IsEmpty()) {
++      node_napi_env result = new node_napi_env__(ctx, module_filename);
++      result->node_env()->AddCleanupHook(
++          [](void* arg) { static_cast<napi_env>(arg)->Unref(); },
++          static_cast<void*>(result));
++      *env = result;
++      return napi_status::napi_ok;
++    }
+   }
+   return napi_status::napi_generic_failure;
+ }
+-
+-napi_status napi_free_env(napi_env env) {
+-  CHECK_ENV(env);
+-  delete env;
+-  return napi_status::napi_ok;
+-}
+\ No newline at end of file
+diff --git a/src/node_api.h b/src/node_api.h
+index 093be02a91..217eb065ee 100644
+--- a/src/node_api.h
++++ b/src/node_api.h
+@@ -273,8 +273,6 @@ node_api_get_module_file_name(napi_env env, const char** result);
+ NAPI_EXTERN napi_status napi_create_env(napi_env* env,
+                                         const char* module_filename);
+ 
+-NAPI_EXTERN napi_status napi_free_env(napi_env env);
+-
+ EXTERN_C_END
+ 
+ #endif  // SRC_NODE_API_H_
+-- 
+2.36.1.windows.1
+
