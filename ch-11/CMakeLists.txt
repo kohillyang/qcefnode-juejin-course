@@ -1,0 +1,82 @@
+cmake_minimum_required(VERSION 3.13.0)
+project (napi)
+set(OpenCV_DIR ${CMAKE_CURRENT_LIST_DIR}/../opencv4.5.4/build)
+set(Python_ROOT_DIR ${CMAKE_CURRENT_LIST_DIR}/../Python3.7.9)
+find_package (Python REQUIRED)
+find_package(Qt5 REQUIRED COMPONENTS Core)
+macro(AURUM_MAKE_OUTPUT_FILE infile prefix ext outfile )
+    string(LENGTH ${CMAKE_CURRENT_BINARY_DIR} _binlength)
+    string(LENGTH ${infile} _infileLength)
+    set(_checkinfile ${CMAKE_CURRENT_SOURCE_DIR})
+    if(_infileLength GREATER _binlength)
+        string(SUBSTRING "${infile}" 0 ${_binlength} _checkinfile)
+        if(_checkinfile STREQUAL "${CMAKE_CURRENT_BINARY_DIR}")
+            file(RELATIVE_PATH rel ${CMAKE_CURRENT_BINARY_DIR} ${infile})
+        else()
+            file(RELATIVE_PATH rel ${CMAKE_CURRENT_SOURCE_DIR} ${infile})
+        endif()
+    else()
+        file(RELATIVE_PATH rel ${CMAKE_CURRENT_SOURCE_DIR} ${infile})
+    endif()
+    if(WIN32 AND rel MATCHES "^([a-zA-Z]):(.*)$") # absolute path
+        set(rel "${CMAKE_MATCH_1}_${CMAKE_MATCH_2}")
+    endif()
+    set(_outfile "${CMAKE_CURRENT_BINARY_DIR}/${rel}")
+    string(REPLACE ".." "__" _outfile ${_outfile})
+    get_filename_component(outpath ${_outfile} PATH)
+    if(CMAKE_VERSION VERSION_LESS "3.14")
+        get_filename_component(_outfile_ext ${_outfile} EXT)
+        get_filename_component(_outfile_ext ${_outfile_ext} NAME_WE)
+        get_filename_component(_outfile ${_outfile} NAME_WE)
+        string(APPEND _outfile ${_outfile_ext})
+    else()
+        get_filename_component(_outfile ${_outfile} NAME_WLE)
+    endif()
+    file(MAKE_DIRECTORY ${outpath})
+    set(${outfile} ${outpath}/${prefix}${_outfile}.${ext})
+endmacro()
+function(AURUM_CREATE_PARSE_COMMAND infile outfile target)
+    add_custom_command(OUTPUT ${outfile}
+                       COMMAND ${Python_EXECUTABLE} ${CMAKE_CURRENT_LIST_DIR}/parser.py 
+                       ${infile} ${outfile}
+                      "$<$<BOOL:$<TARGET_PROPERTY:${target},INCLUDE_DIRECTORIES>>:-I$<JOIN:$<TARGET_PROPERTY:${target},INCLUDE_DIRECTORIES>,;-I>>"
+                      "$<$<BOOL:$<TARGET_PROPERTY:${target},COMPILE_DEFINITIONS>>:-D$<JOIN:$<TARGET_PROPERTY:${target},COMPILE_DEFINITIONS>,;-D>>"
+                       DEPENDS ${infile} ${CMAKE_CURRENT_LIST_DIR}/parser.py
+                       COMMAND_EXPAND_LISTS
+                       VERBATIM)
+endfunction()
+function (AURUM_REFLECTION_SETUP target)
+    get_target_property(tgt_sources ${target} SOURCES)
+    set(source_file_extensions cpp|cc)
+    set(header_file_extensions h|hpp|hxx)
+    foreach(it ${tgt_sources})
+        get_filename_component(it ${it} ABSOLUTE)
+        get_filename_component(fname ${it} NAME_WE)
+        if(it MATCHES \\.\(${source_file_extensions}\))
+            set(outfile ${CMAKE_CURRENT_BINARY_DIR}/${fname}.auc)
+            aurum_create_parse_command(${it} ${CMAKE_CURRENT_BINARY_DIR}/${fname}.auc ${target})
+            target_sources(${target} PRIVATE ${outfile})
+        elseif(it MATCHES \\.\(${header_file_extensions}\))
+            aurum_make_output_file(${it} auc_ cpp outfile)
+            aurum_create_parse_command(${it} ${outfile} ${target})
+            target_sources(${target} PRIVATE ${outfile})
+        endif()
+    endforeach()
+    target_include_directories(${target} PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
+endfunction()
+find_package(OpenCV REQUIRED COMPONENTS world)
+get_target_property(__dll_dbg opencv_world IMPORTED_LOCATION_DEBUG)
+get_target_property(__dll_release opencv_world  IMPORTED_LOCATION_RELEASE)
+add_executable(${PROJECT_NAME}
+    ${CMAKE_CURRENT_LIST_DIR}/main.cc
+)
+aurum_reflection_setup(${PROJECT_NAME})
+target_link_libraries(${PROJECT_NAME} PRIVATE ${OpenCV_LIBRARIES})
+target_include_directories(${PROJECT_NAME} PRIVATE ${CMAKE_CURRENT_LIST_DIR})
+target_link_libraries(${PROJECT_NAME} PRIVATE Qt5::Core)
+add_custom_target(POST_COPY ALL
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:Qt5::Core> $<TARGET_FILE_DIR:${PROJECT_NAME}>
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different "$<$<CONFIG:Debug>:${__dll_dbg}>$<$<CONFIG:Release>:${__dll_release}>$<$<CONFIG:RelWithDebInfo>:${__dll_release}>$<$<CONFIG:MinSizeRel>:${__dll_release}>" $<TARGET_FILE_DIR:${PROJECT_NAME}>
+    COMMAND ${CMAKE_COMMAND} -E copy_directory $<TARGET_FILE_DIR:Qt5::Core>/../plugins/platforms $<TARGET_FILE_DIR:${PROJECT_NAME}>/platforms
+    DEPENDS ${PROJECT_NAME}
+)

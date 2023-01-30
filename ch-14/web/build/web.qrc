@@ -1,0 +1,11 @@
+<RCC>
+    <qresource prefix="/web">
+        <file>.//static/css/main.e6c13ad2.css</file>
+        <file>.//static/js/main.cc1c69bd.js</file>
+        <file>.//static/js/787.d1d4a2c2.chunk.js</file>
+        <file>.//index.html</file>
+        <file>.//static/css/main.e6c13ad2.css.map</file>
+        <file>.//static/js/main.cc1c69bd.js.map</file>
+        <file>.//static/js/787.d1d4a2c2.chunk.js.map</file>
+    </qresource>
+</RCC>

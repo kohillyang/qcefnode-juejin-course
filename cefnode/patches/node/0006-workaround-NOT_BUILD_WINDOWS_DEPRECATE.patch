@@ -1,0 +1,26 @@
+From 8e9d6edbf1b6d3eccfc35d6215245c928ea26fb9 Mon Sep 17 00:00:00 2001
+From: kohill <kohillyang@126.com>
+Date: Sun, 9 Oct 2022 23:51:11 +0800
+Subject: [PATCH 6/8] workaround: NOT_BUILD_WINDOWS_DEPRECATE
+
+To solve building errors like ../../cefnode/node/deps/uv/src/win/util.c(1952,9): error: 'GetVersionExW' is deprecated [-Werror,-Wdeprecated-declarations]
+    if (GetVersionExW(&os_info) == 0) {
+---
+ deps/uv/src/win/util.c | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/deps/uv/src/win/util.c b/deps/uv/src/win/util.c
+index 5ffde08e1a..7b3117e5f1 100644
+--- a/deps/uv/src/win/util.c
++++ b/deps/uv/src/win/util.c
+@@ -19,6 +19,7 @@
+  * IN THE SOFTWARE.
+  */
+ 
++#define FKG_FORCED_USAGE 1
+ #include <assert.h>
+ #include <direct.h>
+ #include <limits.h>
+-- 
+2.36.1.windows.1
+

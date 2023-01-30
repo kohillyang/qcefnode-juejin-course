@@ -1,0 +1,1187 @@
+From d9c09034a2e7336d1a6b9b5cedcff2c7bd4f75c8 Mon Sep 17 00:00:00 2001
+From: kohill <kohillyang@126.com>
+Date: Fri, 7 Oct 2022 10:32:41 +0800
+Subject: [PATCH 2/2] Add message pump handler support
+
+---
+ cef_paths.gypi                                | 10 +-
+ .../capi/cef_render_process_handler_capi.h    | 71 +++++++++++++-
+ include/cef_api_hash.h                        |  8 +-
+ include/cef_render_process_handler.h          | 64 ++++++++++++
+ .../alloy/alloy_content_renderer_client.cc    | 84 ++++++++++++++++
+ .../alloy/alloy_content_renderer_client.h     |  1 +
+ .../cpptoc/message_pump_delegate_cpptoc.cc    | 79 +++++++++++++++
+ .../cpptoc/message_pump_delegate_cpptoc.h     | 38 ++++++++
+ .../cpptoc/render_process_handler_cpptoc.cc   | 22 ++++-
+ ...der_process_messgae_pump_handler_cpptoc.cc | 97 +++++++++++++++++++
+ ...nder_process_messgae_pump_handler_cpptoc.h | 38 ++++++++
+ .../ctocpp/message_pump_delegate_ctocpp.cc    | 69 +++++++++++++
+ .../ctocpp/message_pump_delegate_ctocpp.h     | 42 ++++++++
+ .../ctocpp/render_process_handler_ctocpp.cc   | 20 +++-
+ .../ctocpp/render_process_handler_ctocpp.h    |  4 +-
+ ...der_process_messgae_pump_handler_ctocpp.cc | 86 ++++++++++++++++
+ ...nder_process_messgae_pump_handler_ctocpp.h | 43 ++++++++
+ libcef_dll/wrapper_types.h                    |  4 +-
+ patch/patch.cfg                               |  5 +
+ .../allow_override_default_message_pump.patch | 72 ++++++++++++++
+ 20 files changed, 847 insertions(+), 10 deletions(-)
+ create mode 100644 libcef_dll/cpptoc/message_pump_delegate_cpptoc.cc
+ create mode 100644 libcef_dll/cpptoc/message_pump_delegate_cpptoc.h
+ create mode 100644 libcef_dll/cpptoc/render_process_messgae_pump_handler_cpptoc.cc
+ create mode 100644 libcef_dll/cpptoc/render_process_messgae_pump_handler_cpptoc.h
+ create mode 100644 libcef_dll/ctocpp/message_pump_delegate_ctocpp.cc
+ create mode 100644 libcef_dll/ctocpp/message_pump_delegate_ctocpp.h
+ create mode 100644 libcef_dll/ctocpp/render_process_messgae_pump_handler_ctocpp.cc
+ create mode 100644 libcef_dll/ctocpp/render_process_messgae_pump_handler_ctocpp.h
+ create mode 100644 patch/patches/allow_override_default_message_pump.patch
+
+diff --git a/cef_paths.gypi b/cef_paths.gypi
+index f3d2a9d14..67d20690c 100644
+--- a/cef_paths.gypi
++++ b/cef_paths.gypi
+@@ -8,7 +8,7 @@
+ # by hand. See the translator.README.txt file in the tools directory for
+ # more information.
+ #
+-# $hash=3d75809bdc9a72a0df9df727981f0796b7ddbbc8$
++# $hash=4b2cbce125bb5d8ee9a6765272e90afca12ad3fa$
+ #
+ 
+ {
+@@ -348,6 +348,8 @@
+       'libcef_dll/cpptoc/menu_model_cpptoc.h',
+       'libcef_dll/ctocpp/menu_model_delegate_ctocpp.cc',
+       'libcef_dll/ctocpp/menu_model_delegate_ctocpp.h',
++      'libcef_dll/cpptoc/message_pump_delegate_cpptoc.cc',
++      'libcef_dll/cpptoc/message_pump_delegate_cpptoc.h',
+       'libcef_dll/cpptoc/navigation_entry_cpptoc.cc',
+       'libcef_dll/cpptoc/navigation_entry_cpptoc.h',
+       'libcef_dll/ctocpp/navigation_entry_visitor_ctocpp.cc',
+@@ -382,6 +384,8 @@
+       'libcef_dll/ctocpp/render_handler_ctocpp.h',
+       'libcef_dll/ctocpp/render_process_handler_ctocpp.cc',
+       'libcef_dll/ctocpp/render_process_handler_ctocpp.h',
++      'libcef_dll/ctocpp/render_process_messgae_pump_handler_ctocpp.cc',
++      'libcef_dll/ctocpp/render_process_messgae_pump_handler_ctocpp.h',
+       'libcef_dll/cpptoc/request_cpptoc.cc',
+       'libcef_dll/cpptoc/request_cpptoc.h',
+       'libcef_dll/cpptoc/request_context_cpptoc.cc',
+@@ -652,6 +656,8 @@
+       'libcef_dll/ctocpp/menu_model_ctocpp.h',
+       'libcef_dll/cpptoc/menu_model_delegate_cpptoc.cc',
+       'libcef_dll/cpptoc/menu_model_delegate_cpptoc.h',
++      'libcef_dll/ctocpp/message_pump_delegate_ctocpp.cc',
++      'libcef_dll/ctocpp/message_pump_delegate_ctocpp.h',
+       'libcef_dll/ctocpp/navigation_entry_ctocpp.cc',
+       'libcef_dll/ctocpp/navigation_entry_ctocpp.h',
+       'libcef_dll/cpptoc/navigation_entry_visitor_cpptoc.cc',
+@@ -686,6 +692,8 @@
+       'libcef_dll/cpptoc/render_handler_cpptoc.h',
+       'libcef_dll/cpptoc/render_process_handler_cpptoc.cc',
+       'libcef_dll/cpptoc/render_process_handler_cpptoc.h',
++      'libcef_dll/cpptoc/render_process_messgae_pump_handler_cpptoc.cc',
++      'libcef_dll/cpptoc/render_process_messgae_pump_handler_cpptoc.h',
+       'libcef_dll/ctocpp/request_ctocpp.cc',
+       'libcef_dll/ctocpp/request_ctocpp.h',
+       'libcef_dll/ctocpp/request_context_ctocpp.cc',
+diff --git a/include/capi/cef_render_process_handler_capi.h b/include/capi/cef_render_process_handler_capi.h
+index 2fea446eb..e2c161827 100644
+--- a/include/capi/cef_render_process_handler_capi.h
++++ b/include/capi/cef_render_process_handler_capi.h
+@@ -33,7 +33,7 @@
+ // by hand. See the translator.README.txt file in the tools directory for
+ // more information.
+ //
+-// $hash=0b8abb0e55cb56fcb778ced72a61a108c2b28011$
++// $hash=f710b965942e6c05dd88a05cb420fcdc4b40eb95$
+ //
+ 
+ #ifndef CEF_INCLUDE_CAPI_CEF_RENDER_PROCESS_HANDLER_CAPI_H_
+@@ -53,6 +53,68 @@
+ extern "C" {
+ #endif
+ 
++///
++// Users are responsible for calling functions in this structure after entering
++// the event loop.
++///
++typedef struct _cef_message_pump_delegate_t {
++  ///
++  // Base structure.
++  ///
++  cef_base_ref_counted_t base;
++
++  ///
++  // Executes an immediate task or a ripe delayed task. Returns delayedRuntime
++  // about when do_work() should be called again. If the returned delayedRuntime
++  // is zero, do_work() must be invoked again shortly. Else, do_work() must be
++  // invoked at delayedRuntime or when schedule_work() is invoked, whichever
++  // comes first. Redundant/spurious invocations of do_work() outside of those
++  // requirements are tolerated. do_idle_work() will not be called so long as
++  // delayedRuntime equals to zero.
++  ///
++  int64_t(CEF_CALLBACK* do_work)(struct _cef_message_pump_delegate_t* self);
++
++  ///
++  // Called from within Run just before the message pump goes to sleep.
++  // do_work() must be called again if this function returns zero.
++  ///
++  int64_t(CEF_CALLBACK* do_idle_work)(
++      struct _cef_message_pump_delegate_t* self);
++} cef_message_pump_delegate_t;
++
++///
++// Structure used to implement render process message pump callbacks. The
++// functions of this structure will be called on the render process main thread
++// (TID_RENDERER) unless otherwise indicated.
++///
++typedef struct _cef_render_process_messgae_pump_handler_t {
++  ///
++  // Base structure.
++  ///
++  cef_base_ref_counted_t base;
++
++  ///
++  // The Run function is called to enter the message pump's run loop.
++  ///
++  void(CEF_CALLBACK* run)(
++      struct _cef_render_process_messgae_pump_handler_t* self,
++      struct _cef_message_pump_delegate_t* delegate);
++
++  ///
++  // Schedule a DoWork callback to happen reasonably soon. This function may be
++  // called from any thread.
++  ///
++  void(CEF_CALLBACK* schedule_work)(
++      struct _cef_render_process_messgae_pump_handler_t* self);
++
++  ///
++  // Quit immediately from the most recently entered run loop.  This function
++  // may only be used on the thread that called Run.
++  ///
++  void(CEF_CALLBACK* quit)(
++      struct _cef_render_process_messgae_pump_handler_t* self);
++} cef_render_process_messgae_pump_handler_t;
++
+ ///
+ // Structure used to implement render process callbacks. The functions of this
+ // structure will be called on the render process main thread (TID_RENDERER)
+@@ -64,6 +126,13 @@ typedef struct _cef_render_process_handler_t {
+   ///
+   cef_base_ref_counted_t base;
+ 
++  ///
++  // Return the handler for the message pump.
++  ///
++  struct _cef_render_process_messgae_pump_handler_t*(
++      CEF_CALLBACK* get_message_pump_handler)(
++      struct _cef_render_process_handler_t* self);
++
+   ///
+   // Called after WebKit has been initialized.
+   ///
+diff --git a/include/cef_api_hash.h b/include/cef_api_hash.h
+index bc4579bb1..2153b164f 100644
+--- a/include/cef_api_hash.h
++++ b/include/cef_api_hash.h
+@@ -42,13 +42,13 @@
+ // way that may cause binary incompatibility with other builds. The universal
+ // hash value will change if any platform is affected whereas the platform hash
+ // values will change only if that particular platform is affected.
+-#define CEF_API_HASH_UNIVERSAL "c32d3ae315c5991d1bd81c412635d95a3fd353f8"
++#define CEF_API_HASH_UNIVERSAL "a3d6585043ffc9c2036e67ed63c6c58d5cbb250a"
+ #if defined(OS_WIN)
+-#define CEF_API_HASH_PLATFORM "cb1d823e15caa7e7b6074e3e612d111145b374d1"
++#define CEF_API_HASH_PLATFORM "7bc3a863a029da77121134a68a55128c4425f31f"
+ #elif defined(OS_MAC)
+-#define CEF_API_HASH_PLATFORM "7e3a768a3b73a514763ce9902afb85775ca8c83d"
++#define CEF_API_HASH_PLATFORM "195dc6d89108d61d52dc558773255aa376da9d8b"
+ #elif defined(OS_LINUX)
+-#define CEF_API_HASH_PLATFORM "bc9260335c9493beb100645dbccd587e62925b9e"
++#define CEF_API_HASH_PLATFORM "b4c29dbd5a77f889961626cd7202fe24f697562b"
+ #endif
+ 
+ #ifdef __cplusplus
+diff --git a/include/cef_render_process_handler.h b/include/cef_render_process_handler.h
+index 5718fe920..785429615 100644
+--- a/include/cef_render_process_handler.h
++++ b/include/cef_render_process_handler.h
+@@ -47,6 +47,62 @@
+ #include "include/cef_v8.h"
+ #include "include/cef_values.h"
+ 
++///
++// Users are responsible for calling functions in this class after entering the
++// event loop.
++///
++/*--cef(source=library,no_debugct_check)--*/
++class CefMessagePumpDelegate : public virtual CefBaseRefCounted {
++ public:
++  ///
++  // Executes an immediate task or a ripe delayed task. Returns delayedRuntime
++  // about when DoWork() should be called again. If the returned delayedRuntime
++  // is zero, DoWork() must be invoked again shortly. Else, DoWork() must be
++  // invoked at delayedRuntime or when ScheduleWork() is invoked, whichever
++  // comes first. Redundant/spurious invocations of DoWork() outside of those
++  // requirements are tolerated. DoIdleWork() will not be called so long as
++  // delayedRuntime equals to zero.
++  ///
++  /*--cef(default_retval=0)--*/
++  virtual int64_t DoWork() = 0;
++
++  ///
++  // Called from within Run just before the message pump goes to sleep.
++  // DoWork() must be called again if this function returns zero.
++  ///
++  /*--cef(default_retval=0)--*/
++  virtual int64_t DoIdleWork() = 0;
++};
++
++///
++// Class used to implement render process message pump callbacks.
++// The methods of this class will be called on the render process
++// main thread (TID_RENDERER) unless otherwise indicated.
++///
++/*--cef(source=client,no_debugct_check)--*/
++class CefRenderProcessMessgaePumpHandler : public virtual CefBaseRefCounted {
++ public:
++  ///
++  // The Run method is called to enter the message pump's run loop.
++  ///
++  /*--cef()--*/
++  virtual void Run(CefRefPtr<CefMessagePumpDelegate> delegate) = 0;
++
++  ///
++  // Schedule a DoWork callback to happen reasonably soon. This function may be
++  // called from any thread.
++  ///
++  /*--cef()--*/
++  virtual void ScheduleWork() = 0;
++
++  ///
++  // Quit immediately from the most recently entered run loop.  This method may
++  // only be used on the thread that called Run.
++  ///
++  /*--cef()--*/
++  virtual void Quit() = 0;
++};
++
+ ///
+ // Class used to implement render process callbacks. The methods of this class
+ // will be called on the render process main thread (TID_RENDERER) unless
+@@ -57,6 +113,14 @@ class CefRenderProcessHandler : public virtual CefBaseRefCounted {
+  public:
+   typedef cef_navigation_type_t NavigationType;
+ 
++  ///
++  // Return the handler for the message pump.
++  ///
++  /*--cef()--*/
++  virtual CefRefPtr<CefRenderProcessMessgaePumpHandler>
++  GetMessagePumpHandler() {
++    return nullptr;
++  }
+   ///
+   // Called after WebKit has been initialized.
+   ///
+diff --git a/libcef/renderer/alloy/alloy_content_renderer_client.cc b/libcef/renderer/alloy/alloy_content_renderer_client.cc
+index 7a6dce863..e976d12d5 100644
+--- a/libcef/renderer/alloy/alloy_content_renderer_client.cc
++++ b/libcef/renderer/alloy/alloy_content_renderer_client.cc
+@@ -4,7 +4,9 @@
+ // found in the LICENSE file.
+ 
+ #include "libcef/renderer/alloy/alloy_content_renderer_client.h"
++#include <stdint.h>
+ 
++#include <memory>
+ #include <utility>
+ 
+ #include "build/build_config.h"
+@@ -108,6 +110,76 @@
+ #include "base/strings/sys_string_conversions.h"
+ #endif
+ 
++static CefRefPtr<CefRenderProcessHandler> GetRenderProcessHandler() {
++  CefRefPtr<CefRenderProcessHandler> handler;
++  CefRefPtr<CefApp> application = CefAppManager::Get()->GetApplication();
++  if (application) {
++    handler = application->GetRenderProcessHandler();
++    return handler;
++  }
++  return nullptr;
++}
++
++class CefMsgPumpDelegateImpl : public CefMessagePumpDelegate {
++ public:
++  CefMsgPumpDelegateImpl(base::MessagePump::Delegate* delegate_)
++      : delegate(delegate_) {
++    CHECK(delegate != nullptr);
++  }
++  CefMsgPumpDelegateImpl(const CefMsgPumpDelegateImpl&) = delete;
++  CefMsgPumpDelegateImpl& operator=(const CefMsgPumpDelegateImpl&) = delete;
++  int64_t DoWork() override {
++    auto next_work_info = delegate->DoWork();
++    bool has_more_immediate_work = next_work_info.is_immediate();
++    if (has_more_immediate_work) {
++      return 0;
++    }
++    if (next_work_info.delayed_run_time.is_max()) {
++      return INT64_MAX;
++    } else {
++      return next_work_info.remaining_delay().InMilliseconds();
++    }
++  }
++  int64_t DoIdleWork() override {
++    bool has_more_immediate_work = delegate->DoIdleWork();
++    if (has_more_immediate_work) {
++      return 0;
++    } else {
++      return INT64_MAX;
++    }
++  }
++
++ private:
++  base::MessagePump::Delegate* delegate;
++  IMPLEMENT_REFCOUNTING(CefMessagePumpDelegate);
++};
++class CefDelegateMessagePump : public base::MessagePump {
++ public:
++  CefDelegateMessagePump(
++      CefRefPtr<CefRenderProcessMessgaePumpHandler> msgPumphandler_)
++      : msgPumphandler(msgPumphandler_) {
++    CHECK(msgPumphandler != nullptr);
++  }
++
++  CefDelegateMessagePump(const CefDelegateMessagePump&) = delete;
++  CefDelegateMessagePump& operator=(const CefDelegateMessagePump&) = delete;
++
++  ~CefDelegateMessagePump() override {}
++
++  // MessagePump methods:
++  void Run(base::MessagePump::Delegate* delegate) override {
++    CefRefPtr<CefMessagePumpDelegate> pDelegate =
++        new CefMsgPumpDelegateImpl(delegate);
++    this->msgPumphandler->Run(pDelegate);
++  }
++  void Quit() override { this->msgPumphandler->Quit(); }
++  void ScheduleWork() override { this->msgPumphandler->ScheduleWork(); }
++  void ScheduleDelayedWork(const base::TimeTicks& delayed_work_time) override {}
++
++ private:
++  CefRefPtr<CefRenderProcessMessgaePumpHandler> msgPumphandler;
++};
++
+ AlloyContentRendererClient::AlloyContentRendererClient()
+     : main_entry_time_(base::TimeTicks::Now()),
+       render_manager_(new CefRenderManager) {
+@@ -123,6 +195,18 @@ AlloyContentRendererClient::AlloyContentRendererClient()
+ 
+ AlloyContentRendererClient::~AlloyContentRendererClient() {}
+ 
++std::unique_ptr<base::MessagePump>
++AlloyContentRendererClient::CreateRenderThreadMessagePump() {
++  auto renderHandler = GetRenderProcessHandler();
++  if (renderHandler != nullptr) {
++    auto pumpHandler = renderHandler->GetMessagePumpHandler();
++    if (pumpHandler != nullptr) {
++      return std::make_unique<CefDelegateMessagePump>(pumpHandler);
++    }
++  }
++  return nullptr;
++}
++
+ // static
+ AlloyContentRendererClient* AlloyContentRendererClient::Get() {
+   REQUIRE_ALLOY_RUNTIME();
+diff --git a/libcef/renderer/alloy/alloy_content_renderer_client.h b/libcef/renderer/alloy/alloy_content_renderer_client.h
+index 372fe1607..e322410d4 100644
+--- a/libcef/renderer/alloy/alloy_content_renderer_client.h
++++ b/libcef/renderer/alloy/alloy_content_renderer_client.h
+@@ -59,6 +59,7 @@ class AlloyContentRendererClient
+ 
+   ~AlloyContentRendererClient() override;
+ 
++  std::unique_ptr<base::MessagePump> CreateRenderThreadMessagePump() override;
+   // Returns the singleton AlloyContentRendererClient instance.
+   // This method is deprecated and should not be used in new callsites.
+   static AlloyContentRendererClient* Get();
+diff --git a/libcef_dll/cpptoc/message_pump_delegate_cpptoc.cc b/libcef_dll/cpptoc/message_pump_delegate_cpptoc.cc
+new file mode 100644
+index 000000000..52a32b415
+--- /dev/null
++++ b/libcef_dll/cpptoc/message_pump_delegate_cpptoc.cc
+@@ -0,0 +1,79 @@
++// Copyright (c) 2022 The Chromium Embedded Framework Authors. All rights
++// reserved. Use of this source code is governed by a BSD-style license that
++// can be found in the LICENSE file.
++//
++// ---------------------------------------------------------------------------
++//
++// This file was generated by the CEF translator tool. If making changes by
++// hand only do so within the body of existing method and function
++// implementations. See the translator.README.txt file in the tools directory
++// for more information.
++//
++// $hash=8ea32a997865c2739c2fe54e62d9e0d777f131a6$
++//
++
++#include "libcef_dll/cpptoc/message_pump_delegate_cpptoc.h"
++
++namespace {
++
++// MEMBER FUNCTIONS - Body may be edited by hand.
++
++int64_t CEF_CALLBACK
++message_pump_delegate_do_work(struct _cef_message_pump_delegate_t* self) {
++  // AUTO-GENERATED CONTENT - DELETE THIS COMMENT BEFORE MODIFYING
++
++  DCHECK(self);
++  if (!self)
++    return 0;
++
++  // Execute
++  int64_t _retval = CefMessagePumpDelegateCppToC::Get(self)->DoWork();
++
++  // Return type: simple
++  return _retval;
++}
++
++int64_t CEF_CALLBACK
++message_pump_delegate_do_idle_work(struct _cef_message_pump_delegate_t* self) {
++  // AUTO-GENERATED CONTENT - DELETE THIS COMMENT BEFORE MODIFYING
++
++  DCHECK(self);
++  if (!self)
++    return 0;
++
++  // Execute
++  int64_t _retval = CefMessagePumpDelegateCppToC::Get(self)->DoIdleWork();
++
++  // Return type: simple
++  return _retval;
++}
++
++}  // namespace
++
++// CONSTRUCTOR - Do not edit by hand.
++
++CefMessagePumpDelegateCppToC::CefMessagePumpDelegateCppToC() {
++  GetStruct()->do_work = message_pump_delegate_do_work;
++  GetStruct()->do_idle_work = message_pump_delegate_do_idle_work;
++}
++
++// DESTRUCTOR - Do not edit by hand.
++
++CefMessagePumpDelegateCppToC::~CefMessagePumpDelegateCppToC() {}
++
++template <>
++CefRefPtr<CefMessagePumpDelegate> CefCppToCRefCounted<
++    CefMessagePumpDelegateCppToC,
++    CefMessagePumpDelegate,
++    cef_message_pump_delegate_t>::UnwrapDerived(CefWrapperType type,
++                                                cef_message_pump_delegate_t*
++                                                    s) {
++  NOTREACHED() << "Unexpected class type: " << type;
++  return nullptr;
++}
++
++template <>
++CefWrapperType CefCppToCRefCounted<CefMessagePumpDelegateCppToC,
++                                   CefMessagePumpDelegate,
++                                   cef_message_pump_delegate_t>::kWrapperType =
++    WT_MESSAGE_PUMP_DELEGATE;
+diff --git a/libcef_dll/cpptoc/message_pump_delegate_cpptoc.h b/libcef_dll/cpptoc/message_pump_delegate_cpptoc.h
+new file mode 100644
+index 000000000..56e03cb73
+--- /dev/null
++++ b/libcef_dll/cpptoc/message_pump_delegate_cpptoc.h
+@@ -0,0 +1,38 @@
++// Copyright (c) 2022 The Chromium Embedded Framework Authors. All rights
++// reserved. Use of this source code is governed by a BSD-style license that
++// can be found in the LICENSE file.
++//
++// ---------------------------------------------------------------------------
++//
++// This file was generated by the CEF translator tool. If making changes by
++// hand only do so within the body of existing method and function
++// implementations. See the translator.README.txt file in the tools directory
++// for more information.
++//
++// $hash=a2df5df929de2b6cea9133facae9db1473d4413d$
++//
++
++#ifndef CEF_LIBCEF_DLL_CPPTOC_MESSAGE_PUMP_DELEGATE_CPPTOC_H_
++#define CEF_LIBCEF_DLL_CPPTOC_MESSAGE_PUMP_DELEGATE_CPPTOC_H_
++#pragma once
++
++#if !defined(BUILDING_CEF_SHARED)
++#error This file can be included DLL-side only
++#endif
++
++#include "include/capi/cef_render_process_handler_capi.h"
++#include "include/cef_render_process_handler.h"
++#include "libcef_dll/cpptoc/cpptoc_ref_counted.h"
++
++// Wrap a C++ class with a C structure.
++// This class may be instantiated and accessed DLL-side only.
++class CefMessagePumpDelegateCppToC
++    : public CefCppToCRefCounted<CefMessagePumpDelegateCppToC,
++                                 CefMessagePumpDelegate,
++                                 cef_message_pump_delegate_t> {
++ public:
++  CefMessagePumpDelegateCppToC();
++  virtual ~CefMessagePumpDelegateCppToC();
++};
++
++#endif  // CEF_LIBCEF_DLL_CPPTOC_MESSAGE_PUMP_DELEGATE_CPPTOC_H_
+diff --git a/libcef_dll/cpptoc/render_process_handler_cpptoc.cc b/libcef_dll/cpptoc/render_process_handler_cpptoc.cc
+index 42c4ad45e..8811df5f3 100644
+--- a/libcef_dll/cpptoc/render_process_handler_cpptoc.cc
++++ b/libcef_dll/cpptoc/render_process_handler_cpptoc.cc
+@@ -9,11 +9,12 @@
+ // implementations. See the translator.README.txt file in the tools directory
+ // for more information.
+ //
+-// $hash=08f14fa621595f247e87853c39c3375fce2c9326$
++// $hash=079cef710254b9b4a2775b33c79d59826405c3e4$
+ //
+ 
+ #include "libcef_dll/cpptoc/render_process_handler_cpptoc.h"
+ #include "libcef_dll/cpptoc/load_handler_cpptoc.h"
++#include "libcef_dll/cpptoc/render_process_messgae_pump_handler_cpptoc.h"
+ #include "libcef_dll/ctocpp/browser_ctocpp.h"
+ #include "libcef_dll/ctocpp/dictionary_value_ctocpp.h"
+ #include "libcef_dll/ctocpp/domnode_ctocpp.h"
+@@ -27,6 +28,23 @@ namespace {
+ 
+ // MEMBER FUNCTIONS - Body may be edited by hand.
+ 
++cef_render_process_messgae_pump_handler_t* CEF_CALLBACK
++render_process_handler_get_message_pump_handler(
++    struct _cef_render_process_handler_t* self) {
++  // AUTO-GENERATED CONTENT - DELETE THIS COMMENT BEFORE MODIFYING
++
++  DCHECK(self);
++  if (!self)
++    return NULL;
++
++  // Execute
++  CefRefPtr<CefRenderProcessMessgaePumpHandler> _retval =
++      CefRenderProcessHandlerCppToC::Get(self)->GetMessagePumpHandler();
++
++  // Return type: refptr_same
++  return CefRenderProcessMessgaePumpHandlerCppToC::Wrap(_retval);
++}
++
+ void CEF_CALLBACK render_process_handler_on_web_kit_initialized(
+     struct _cef_render_process_handler_t* self) {
+   // AUTO-GENERATED CONTENT - DELETE THIS COMMENT BEFORE MODIFYING
+@@ -253,6 +271,8 @@ int CEF_CALLBACK render_process_handler_on_process_message_received(
+ // CONSTRUCTOR - Do not edit by hand.
+ 
+ CefRenderProcessHandlerCppToC::CefRenderProcessHandlerCppToC() {
++  GetStruct()->get_message_pump_handler =
++      render_process_handler_get_message_pump_handler;
+   GetStruct()->on_web_kit_initialized =
+       render_process_handler_on_web_kit_initialized;
+   GetStruct()->on_browser_created = render_process_handler_on_browser_created;
+diff --git a/libcef_dll/cpptoc/render_process_messgae_pump_handler_cpptoc.cc b/libcef_dll/cpptoc/render_process_messgae_pump_handler_cpptoc.cc
+new file mode 100644
+index 000000000..05c82f9b2
+--- /dev/null
++++ b/libcef_dll/cpptoc/render_process_messgae_pump_handler_cpptoc.cc
+@@ -0,0 +1,97 @@
++// Copyright (c) 2022 The Chromium Embedded Framework Authors. All rights
++// reserved. Use of this source code is governed by a BSD-style license that
++// can be found in the LICENSE file.
++//
++// ---------------------------------------------------------------------------
++//
++// This file was generated by the CEF translator tool. If making changes by
++// hand only do so within the body of existing method and function
++// implementations. See the translator.README.txt file in the tools directory
++// for more information.
++//
++// $hash=b79003cb757db7d5ae3ac101ff0ae1cf03735ea1$
++//
++
++#include "libcef_dll/cpptoc/render_process_messgae_pump_handler_cpptoc.h"
++#include "libcef_dll/ctocpp/message_pump_delegate_ctocpp.h"
++
++namespace {
++
++// MEMBER FUNCTIONS - Body may be edited by hand.
++
++void CEF_CALLBACK render_process_messgae_pump_handler_run(
++    struct _cef_render_process_messgae_pump_handler_t* self,
++    cef_message_pump_delegate_t* delegate) {
++  // AUTO-GENERATED CONTENT - DELETE THIS COMMENT BEFORE MODIFYING
++
++  DCHECK(self);
++  if (!self)
++    return;
++  // Verify param: delegate; type: refptr_diff
++  DCHECK(delegate);
++  if (!delegate)
++    return;
++
++  // Execute
++  CefRenderProcessMessgaePumpHandlerCppToC::Get(self)->Run(
++      CefMessagePumpDelegateCToCpp::Wrap(delegate));
++}
++
++void CEF_CALLBACK render_process_messgae_pump_handler_schedule_work(
++    struct _cef_render_process_messgae_pump_handler_t* self) {
++  // AUTO-GENERATED CONTENT - DELETE THIS COMMENT BEFORE MODIFYING
++
++  DCHECK(self);
++  if (!self)
++    return;
++
++  // Execute
++  CefRenderProcessMessgaePumpHandlerCppToC::Get(self)->ScheduleWork();
++}
++
++void CEF_CALLBACK render_process_messgae_pump_handler_quit(
++    struct _cef_render_process_messgae_pump_handler_t* self) {
++  // AUTO-GENERATED CONTENT - DELETE THIS COMMENT BEFORE MODIFYING
++
++  DCHECK(self);
++  if (!self)
++    return;
++
++  // Execute
++  CefRenderProcessMessgaePumpHandlerCppToC::Get(self)->Quit();
++}
++
++}  // namespace
++
++// CONSTRUCTOR - Do not edit by hand.
++
++CefRenderProcessMessgaePumpHandlerCppToC::
++    CefRenderProcessMessgaePumpHandlerCppToC() {
++  GetStruct()->run = render_process_messgae_pump_handler_run;
++  GetStruct()->schedule_work =
++      render_process_messgae_pump_handler_schedule_work;
++  GetStruct()->quit = render_process_messgae_pump_handler_quit;
++}
++
++// DESTRUCTOR - Do not edit by hand.
++
++CefRenderProcessMessgaePumpHandlerCppToC::
++    ~CefRenderProcessMessgaePumpHandlerCppToC() {}
++
++template <>
++CefRefPtr<CefRenderProcessMessgaePumpHandler>
++CefCppToCRefCounted<CefRenderProcessMessgaePumpHandlerCppToC,
++                    CefRenderProcessMessgaePumpHandler,
++                    cef_render_process_messgae_pump_handler_t>::
++    UnwrapDerived(CefWrapperType type,
++                  cef_render_process_messgae_pump_handler_t* s) {
++  NOTREACHED() << "Unexpected class type: " << type;
++  return nullptr;
++}
++
++template <>
++CefWrapperType CefCppToCRefCounted<
++    CefRenderProcessMessgaePumpHandlerCppToC,
++    CefRenderProcessMessgaePumpHandler,
++    cef_render_process_messgae_pump_handler_t>::kWrapperType =
++    WT_RENDER_PROCESS_MESSGAE_PUMP_HANDLER;
+diff --git a/libcef_dll/cpptoc/render_process_messgae_pump_handler_cpptoc.h b/libcef_dll/cpptoc/render_process_messgae_pump_handler_cpptoc.h
+new file mode 100644
+index 000000000..dd0639daa
+--- /dev/null
++++ b/libcef_dll/cpptoc/render_process_messgae_pump_handler_cpptoc.h
+@@ -0,0 +1,38 @@
++// Copyright (c) 2022 The Chromium Embedded Framework Authors. All rights
++// reserved. Use of this source code is governed by a BSD-style license that
++// can be found in the LICENSE file.
++//
++// ---------------------------------------------------------------------------
++//
++// This file was generated by the CEF translator tool. If making changes by
++// hand only do so within the body of existing method and function
++// implementations. See the translator.README.txt file in the tools directory
++// for more information.
++//
++// $hash=cada816181e2b00aa8c6d4c760cc124cecaad2d7$
++//
++
++#ifndef CEF_LIBCEF_DLL_CPPTOC_RENDER_PROCESS_MESSGAE_PUMP_HANDLER_CPPTOC_H_
++#define CEF_LIBCEF_DLL_CPPTOC_RENDER_PROCESS_MESSGAE_PUMP_HANDLER_CPPTOC_H_
++#pragma once
++
++#if !defined(WRAPPING_CEF_SHARED)
++#error This file can be included wrapper-side only
++#endif
++
++#include "include/capi/cef_render_process_handler_capi.h"
++#include "include/cef_render_process_handler.h"
++#include "libcef_dll/cpptoc/cpptoc_ref_counted.h"
++
++// Wrap a C++ class with a C structure.
++// This class may be instantiated and accessed wrapper-side only.
++class CefRenderProcessMessgaePumpHandlerCppToC
++    : public CefCppToCRefCounted<CefRenderProcessMessgaePumpHandlerCppToC,
++                                 CefRenderProcessMessgaePumpHandler,
++                                 cef_render_process_messgae_pump_handler_t> {
++ public:
++  CefRenderProcessMessgaePumpHandlerCppToC();
++  virtual ~CefRenderProcessMessgaePumpHandlerCppToC();
++};
++
++#endif  // CEF_LIBCEF_DLL_CPPTOC_RENDER_PROCESS_MESSGAE_PUMP_HANDLER_CPPTOC_H_
+diff --git a/libcef_dll/ctocpp/message_pump_delegate_ctocpp.cc b/libcef_dll/ctocpp/message_pump_delegate_ctocpp.cc
+new file mode 100644
+index 000000000..2a4234760
+--- /dev/null
++++ b/libcef_dll/ctocpp/message_pump_delegate_ctocpp.cc
+@@ -0,0 +1,69 @@
++// Copyright (c) 2022 The Chromium Embedded Framework Authors. All rights
++// reserved. Use of this source code is governed by a BSD-style license that
++// can be found in the LICENSE file.
++//
++// ---------------------------------------------------------------------------
++//
++// This file was generated by the CEF translator tool. If making changes by
++// hand only do so within the body of existing method and function
++// implementations. See the translator.README.txt file in the tools directory
++// for more information.
++//
++// $hash=6040b07b74393899ce49309a8d769554481c48b5$
++//
++
++#include "libcef_dll/ctocpp/message_pump_delegate_ctocpp.h"
++
++// VIRTUAL METHODS - Body may be edited by hand.
++
++NO_SANITIZE("cfi-icall") int64_t CefMessagePumpDelegateCToCpp::DoWork() {
++  cef_message_pump_delegate_t* _struct = GetStruct();
++  if (CEF_MEMBER_MISSING(_struct, do_work))
++    return 0;
++
++  // AUTO-GENERATED CONTENT - DELETE THIS COMMENT BEFORE MODIFYING
++
++  // Execute
++  int64_t _retval = _struct->do_work(_struct);
++
++  // Return type: simple
++  return _retval;
++}
++
++NO_SANITIZE("cfi-icall") int64_t CefMessagePumpDelegateCToCpp::DoIdleWork() {
++  cef_message_pump_delegate_t* _struct = GetStruct();
++  if (CEF_MEMBER_MISSING(_struct, do_idle_work))
++    return 0;
++
++  // AUTO-GENERATED CONTENT - DELETE THIS COMMENT BEFORE MODIFYING
++
++  // Execute
++  int64_t _retval = _struct->do_idle_work(_struct);
++
++  // Return type: simple
++  return _retval;
++}
++
++// CONSTRUCTOR - Do not edit by hand.
++
++CefMessagePumpDelegateCToCpp::CefMessagePumpDelegateCToCpp() {}
++
++// DESTRUCTOR - Do not edit by hand.
++
++CefMessagePumpDelegateCToCpp::~CefMessagePumpDelegateCToCpp() {}
++
++template <>
++cef_message_pump_delegate_t* CefCToCppRefCounted<
++    CefMessagePumpDelegateCToCpp,
++    CefMessagePumpDelegate,
++    cef_message_pump_delegate_t>::UnwrapDerived(CefWrapperType type,
++                                                CefMessagePumpDelegate* c) {
++  NOTREACHED() << "Unexpected class type: " << type;
++  return nullptr;
++}
++
++template <>
++CefWrapperType CefCToCppRefCounted<CefMessagePumpDelegateCToCpp,
++                                   CefMessagePumpDelegate,
++                                   cef_message_pump_delegate_t>::kWrapperType =
++    WT_MESSAGE_PUMP_DELEGATE;
+diff --git a/libcef_dll/ctocpp/message_pump_delegate_ctocpp.h b/libcef_dll/ctocpp/message_pump_delegate_ctocpp.h
+new file mode 100644
+index 000000000..f67f71d3d
+--- /dev/null
++++ b/libcef_dll/ctocpp/message_pump_delegate_ctocpp.h
+@@ -0,0 +1,42 @@
++// Copyright (c) 2022 The Chromium Embedded Framework Authors. All rights
++// reserved. Use of this source code is governed by a BSD-style license that
++// can be found in the LICENSE file.
++//
++// ---------------------------------------------------------------------------
++//
++// This file was generated by the CEF translator tool. If making changes by
++// hand only do so within the body of existing method and function
++// implementations. See the translator.README.txt file in the tools directory
++// for more information.
++//
++// $hash=a3767401e417a1840ffcae82a965303145be3d88$
++//
++
++#ifndef CEF_LIBCEF_DLL_CTOCPP_MESSAGE_PUMP_DELEGATE_CTOCPP_H_
++#define CEF_LIBCEF_DLL_CTOCPP_MESSAGE_PUMP_DELEGATE_CTOCPP_H_
++#pragma once
++
++#if !defined(WRAPPING_CEF_SHARED)
++#error This file can be included wrapper-side only
++#endif
++
++#include "include/capi/cef_render_process_handler_capi.h"
++#include "include/cef_render_process_handler.h"
++#include "libcef_dll/ctocpp/ctocpp_ref_counted.h"
++
++// Wrap a C structure with a C++ class.
++// This class may be instantiated and accessed wrapper-side only.
++class CefMessagePumpDelegateCToCpp
++    : public CefCToCppRefCounted<CefMessagePumpDelegateCToCpp,
++                                 CefMessagePumpDelegate,
++                                 cef_message_pump_delegate_t> {
++ public:
++  CefMessagePumpDelegateCToCpp();
++  virtual ~CefMessagePumpDelegateCToCpp();
++
++  // CefMessagePumpDelegate methods.
++  int64_t DoWork() override;
++  int64_t DoIdleWork() override;
++};
++
++#endif  // CEF_LIBCEF_DLL_CTOCPP_MESSAGE_PUMP_DELEGATE_CTOCPP_H_
+diff --git a/libcef_dll/ctocpp/render_process_handler_ctocpp.cc b/libcef_dll/ctocpp/render_process_handler_ctocpp.cc
+index c5c5cc3b2..079345dcf 100644
+--- a/libcef_dll/ctocpp/render_process_handler_ctocpp.cc
++++ b/libcef_dll/ctocpp/render_process_handler_ctocpp.cc
+@@ -9,7 +9,7 @@
+ // implementations. See the translator.README.txt file in the tools directory
+ // for more information.
+ //
+-// $hash=a75829d0f47e772086a586f213cfdfe54ff5554c$
++// $hash=424ebc1802280014a8f3ea4b9bb7e30aebdfb12a$
+ //
+ 
+ #include "libcef_dll/ctocpp/render_process_handler_ctocpp.h"
+@@ -22,9 +22,27 @@
+ #include "libcef_dll/cpptoc/v8exception_cpptoc.h"
+ #include "libcef_dll/cpptoc/v8stack_trace_cpptoc.h"
+ #include "libcef_dll/ctocpp/load_handler_ctocpp.h"
++#include "libcef_dll/ctocpp/render_process_messgae_pump_handler_ctocpp.h"
+ 
+ // VIRTUAL METHODS - Body may be edited by hand.
+ 
++NO_SANITIZE("cfi-icall")
++CefRefPtr<CefRenderProcessMessgaePumpHandler> CefRenderProcessHandlerCToCpp::
++    GetMessagePumpHandler() {
++  cef_render_process_handler_t* _struct = GetStruct();
++  if (CEF_MEMBER_MISSING(_struct, get_message_pump_handler))
++    return nullptr;
++
++  // AUTO-GENERATED CONTENT - DELETE THIS COMMENT BEFORE MODIFYING
++
++  // Execute
++  cef_render_process_messgae_pump_handler_t* _retval =
++      _struct->get_message_pump_handler(_struct);
++
++  // Return type: refptr_same
++  return CefRenderProcessMessgaePumpHandlerCToCpp::Wrap(_retval);
++}
++
+ NO_SANITIZE("cfi-icall")
+ void CefRenderProcessHandlerCToCpp::OnWebKitInitialized() {
+   cef_render_process_handler_t* _struct = GetStruct();
+diff --git a/libcef_dll/ctocpp/render_process_handler_ctocpp.h b/libcef_dll/ctocpp/render_process_handler_ctocpp.h
+index b587be7aa..99e653ebc 100644
+--- a/libcef_dll/ctocpp/render_process_handler_ctocpp.h
++++ b/libcef_dll/ctocpp/render_process_handler_ctocpp.h
+@@ -9,7 +9,7 @@
+ // implementations. See the translator.README.txt file in the tools directory
+ // for more information.
+ //
+-// $hash=c87a2a5637615d6b7994f80cef17651c73cdb8e2$
++// $hash=3f4b72ae63c58367eaaee37cf69a915f864875c4$
+ //
+ 
+ #ifndef CEF_LIBCEF_DLL_CTOCPP_RENDER_PROCESS_HANDLER_CTOCPP_H_
+@@ -35,6 +35,8 @@ class CefRenderProcessHandlerCToCpp
+   virtual ~CefRenderProcessHandlerCToCpp();
+ 
+   // CefRenderProcessHandler methods.
++  CefRefPtr<CefRenderProcessMessgaePumpHandler> GetMessagePumpHandler()
++      override;
+   void OnWebKitInitialized() override;
+   void OnBrowserCreated(CefRefPtr<CefBrowser> browser,
+                         CefRefPtr<CefDictionaryValue> extra_info) override;
+diff --git a/libcef_dll/ctocpp/render_process_messgae_pump_handler_ctocpp.cc b/libcef_dll/ctocpp/render_process_messgae_pump_handler_ctocpp.cc
+new file mode 100644
+index 000000000..ea6673537
+--- /dev/null
++++ b/libcef_dll/ctocpp/render_process_messgae_pump_handler_ctocpp.cc
+@@ -0,0 +1,86 @@
++// Copyright (c) 2022 The Chromium Embedded Framework Authors. All rights
++// reserved. Use of this source code is governed by a BSD-style license that
++// can be found in the LICENSE file.
++//
++// ---------------------------------------------------------------------------
++//
++// This file was generated by the CEF translator tool. If making changes by
++// hand only do so within the body of existing method and function
++// implementations. See the translator.README.txt file in the tools directory
++// for more information.
++//
++// $hash=f83cf73a598bceb30ca550931d02405e9847f977$
++//
++
++#include "libcef_dll/ctocpp/render_process_messgae_pump_handler_ctocpp.h"
++#include "libcef_dll/cpptoc/message_pump_delegate_cpptoc.h"
++
++// VIRTUAL METHODS - Body may be edited by hand.
++
++NO_SANITIZE("cfi-icall")
++void CefRenderProcessMessgaePumpHandlerCToCpp::Run(
++    CefRefPtr<CefMessagePumpDelegate> delegate) {
++  cef_render_process_messgae_pump_handler_t* _struct = GetStruct();
++  if (CEF_MEMBER_MISSING(_struct, run))
++    return;
++
++  // AUTO-GENERATED CONTENT - DELETE THIS COMMENT BEFORE MODIFYING
++
++  // Verify param: delegate; type: refptr_diff
++  DCHECK(delegate.get());
++  if (!delegate.get())
++    return;
++
++  // Execute
++  _struct->run(_struct, CefMessagePumpDelegateCppToC::Wrap(delegate));
++}
++
++NO_SANITIZE("cfi-icall")
++void CefRenderProcessMessgaePumpHandlerCToCpp::ScheduleWork() {
++  cef_render_process_messgae_pump_handler_t* _struct = GetStruct();
++  if (CEF_MEMBER_MISSING(_struct, schedule_work))
++    return;
++
++  // AUTO-GENERATED CONTENT - DELETE THIS COMMENT BEFORE MODIFYING
++
++  // Execute
++  _struct->schedule_work(_struct);
++}
++
++NO_SANITIZE("cfi-icall") void CefRenderProcessMessgaePumpHandlerCToCpp::Quit() {
++  cef_render_process_messgae_pump_handler_t* _struct = GetStruct();
++  if (CEF_MEMBER_MISSING(_struct, quit))
++    return;
++
++  // AUTO-GENERATED CONTENT - DELETE THIS COMMENT BEFORE MODIFYING
++
++  // Execute
++  _struct->quit(_struct);
++}
++
++// CONSTRUCTOR - Do not edit by hand.
++
++CefRenderProcessMessgaePumpHandlerCToCpp::
++    CefRenderProcessMessgaePumpHandlerCToCpp() {}
++
++// DESTRUCTOR - Do not edit by hand.
++
++CefRenderProcessMessgaePumpHandlerCToCpp::
++    ~CefRenderProcessMessgaePumpHandlerCToCpp() {}
++
++template <>
++cef_render_process_messgae_pump_handler_t*
++CefCToCppRefCounted<CefRenderProcessMessgaePumpHandlerCToCpp,
++                    CefRenderProcessMessgaePumpHandler,
++                    cef_render_process_messgae_pump_handler_t>::
++    UnwrapDerived(CefWrapperType type, CefRenderProcessMessgaePumpHandler* c) {
++  NOTREACHED() << "Unexpected class type: " << type;
++  return nullptr;
++}
++
++template <>
++CefWrapperType CefCToCppRefCounted<
++    CefRenderProcessMessgaePumpHandlerCToCpp,
++    CefRenderProcessMessgaePumpHandler,
++    cef_render_process_messgae_pump_handler_t>::kWrapperType =
++    WT_RENDER_PROCESS_MESSGAE_PUMP_HANDLER;
+diff --git a/libcef_dll/ctocpp/render_process_messgae_pump_handler_ctocpp.h b/libcef_dll/ctocpp/render_process_messgae_pump_handler_ctocpp.h
+new file mode 100644
+index 000000000..49f1cb899
+--- /dev/null
++++ b/libcef_dll/ctocpp/render_process_messgae_pump_handler_ctocpp.h
+@@ -0,0 +1,43 @@
++// Copyright (c) 2022 The Chromium Embedded Framework Authors. All rights
++// reserved. Use of this source code is governed by a BSD-style license that
++// can be found in the LICENSE file.
++//
++// ---------------------------------------------------------------------------
++//
++// This file was generated by the CEF translator tool. If making changes by
++// hand only do so within the body of existing method and function
++// implementations. See the translator.README.txt file in the tools directory
++// for more information.
++//
++// $hash=4d2395731307f34bc6fb54fdf9de552167a852eb$
++//
++
++#ifndef CEF_LIBCEF_DLL_CTOCPP_RENDER_PROCESS_MESSGAE_PUMP_HANDLER_CTOCPP_H_
++#define CEF_LIBCEF_DLL_CTOCPP_RENDER_PROCESS_MESSGAE_PUMP_HANDLER_CTOCPP_H_
++#pragma once
++
++#if !defined(BUILDING_CEF_SHARED)
++#error This file can be included DLL-side only
++#endif
++
++#include "include/capi/cef_render_process_handler_capi.h"
++#include "include/cef_render_process_handler.h"
++#include "libcef_dll/ctocpp/ctocpp_ref_counted.h"
++
++// Wrap a C structure with a C++ class.
++// This class may be instantiated and accessed DLL-side only.
++class CefRenderProcessMessgaePumpHandlerCToCpp
++    : public CefCToCppRefCounted<CefRenderProcessMessgaePumpHandlerCToCpp,
++                                 CefRenderProcessMessgaePumpHandler,
++                                 cef_render_process_messgae_pump_handler_t> {
++ public:
++  CefRenderProcessMessgaePumpHandlerCToCpp();
++  virtual ~CefRenderProcessMessgaePumpHandlerCToCpp();
++
++  // CefRenderProcessMessgaePumpHandler methods.
++  void Run(CefRefPtr<CefMessagePumpDelegate> delegate) override;
++  void ScheduleWork() override;
++  void Quit() override;
++};
++
++#endif  // CEF_LIBCEF_DLL_CTOCPP_RENDER_PROCESS_MESSGAE_PUMP_HANDLER_CTOCPP_H_
+diff --git a/libcef_dll/wrapper_types.h b/libcef_dll/wrapper_types.h
+index c28d05a5e..27fb8d7b4 100644
+--- a/libcef_dll/wrapper_types.h
++++ b/libcef_dll/wrapper_types.h
+@@ -9,7 +9,7 @@
+ // implementations. See the translator.README.txt file in the tools directory
+ // for more information.
+ //
+-// $hash=4e961a86c94ee512e3c282c0b620e35992bf862b$
++// $hash=46c3a1f23a2de343e2c553885cf15dd1d7524667$
+ //
+ 
+ #ifndef CEF_LIBCEF_DLL_WRAPPER_TYPES_H_
+@@ -88,6 +88,7 @@ enum CefWrapperType {
+   WT_MENU_BUTTON_PRESSED_LOCK,
+   WT_MENU_MODEL,
+   WT_MENU_MODEL_DELEGATE,
++  WT_MESSAGE_PUMP_DELEGATE,
+   WT_NAVIGATION_ENTRY,
+   WT_NAVIGATION_ENTRY_VISITOR,
+   WT_OVERLAY_CONTROLLER,
+@@ -105,6 +106,7 @@ enum CefWrapperType {
+   WT_REGISTRATION,
+   WT_RENDER_HANDLER,
+   WT_RENDER_PROCESS_HANDLER,
++  WT_RENDER_PROCESS_MESSGAE_PUMP_HANDLER,
+   WT_REQUEST,
+   WT_REQUEST_CONTEXT,
+   WT_REQUEST_CONTEXT_HANDLER,
+diff --git a/patch/patch.cfg b/patch/patch.cfg
+index cceabb687..acdba95ca 100644
+--- a/patch/patch.cfg
++++ b/patch/patch.cfg
+@@ -550,5 +550,10 @@ patches = [
+     # spamming the debug log.
+     # https://bugs.chromium.org/p/chromium/issues/detail?id=1288842#c29
+     'name': 'base_metrics_1288842',
++  },
++  {
++    # Allow the render content client to provide a custom message pump for 
++    # the render main thread.
++    'name': 'allow_override_default_message_pump',
+   }
+ ]
+diff --git a/patch/patches/allow_override_default_message_pump.patch b/patch/patches/allow_override_default_message_pump.patch
+new file mode 100644
+index 000000000..09f26a299
+--- /dev/null
++++ b/patch/patches/allow_override_default_message_pump.patch
+@@ -0,0 +1,72 @@
++diff --git content/public/renderer/content_renderer_client.h content/public/renderer/content_renderer_client.h
++index 11f606368d9e8..5a0b86e5845b2 100644
++--- content/public/renderer/content_renderer_client.h
+++++ content/public/renderer/content_renderer_client.h
++@@ -15,6 +15,7 @@
++ #include "base/callback_forward.h"
++ #include "base/files/file_path.h"
++ #include "base/memory/ref_counted.h"
+++#include "base/message_loop/message_pump.h"
++ #include "base/task/thread_pool/thread_pool_instance.h"
++ #include "build/build_config.h"
++ #include "content/common/content_export.h"
++@@ -42,7 +43,7 @@ class SkBitmap;
++ namespace base {
++ class FilePath;
++ class SingleThreadTaskRunner;
++-}
+++}  // namespace base
++ 
++ namespace blink {
++ class WebElement;
++@@ -66,7 +67,7 @@ class Demuxer;
++ class GpuVideoAcceleratorFactories;
++ class MediaLog;
++ class RendererFactory;
++-}
+++}  // namespace media
++ 
++ namespace mojo {
++ class BinderMap;
++@@ -80,6 +81,12 @@ class CONTENT_EXPORT ContentRendererClient {
++  public:
++   virtual ~ContentRendererClient() {}
++ 
+++  // Allows the centent client to provide a custom message pump for the render
+++  // thread.
+++  virtual std::unique_ptr<base::MessagePump> CreateRenderThreadMessagePump() {
+++    return nullptr;
+++  }
+++
++   // Notifies us that the RenderThread has been created.
++   virtual void RenderThreadStarted() {}
++ 
++diff --git content/renderer/renderer_main.cc content/renderer/renderer_main.cc
++index af6c0c7d3a5fe..6dba8da2dd79c 100644
++--- content/renderer/renderer_main.cc
+++++ content/renderer/renderer_main.cc
++@@ -3,6 +3,7 @@
++ // found in the LICENSE file.
++ 
++ #include <stddef.h>
+++#include <memory>
++ #include <utility>
++ 
++ #include "base/base_switches.h"
++@@ -103,6 +104,16 @@ std::unique_ptr<base::MessagePump> CreateMainThreadMessagePump() {
++   // Allow FIDL APIs on renderer main thread.
++   return base::MessagePump::Create(base::MessagePumpType::IO);
++ #else
+++  auto client = GetContentClient();
+++  if (client != nullptr) {
+++    auto renderClient = client->renderer();
+++    if (renderClient != nullptr) {
+++      auto msgPump = renderClient->CreateRenderThreadMessagePump();
+++      if (msgPump != nullptr) {
+++        return msgPump;
+++      }
+++    }
+++  }
++   return base::MessagePump::Create(base::MessagePumpType::DEFAULT);
++ #endif
++ }
+-- 
+2.36.1.windows.1
+

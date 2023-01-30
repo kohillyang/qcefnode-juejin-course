@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>ChatClient</title>
+    <script type="text/javascript" src="qwebchannel.js"></script>
+    <script>
+        'use strict';
+        var wsUri = "ws://localhost:3333";
+        window.onload = function() {
+            var socket = new WebSocket(wsUri);
+            socket.onclose = function() {
+                console.error("web channel closed");
+            };
+            socket.onerror = function(error) {
+                console.error("web channel error: " + error);
+            };
+            socket.onopen = function() {
+                window.channel = new QWebChannel(socket, function(channel) {
+                    window.obj = channel.objects.obj
+                });
+            }
+        }
+    </script>
+</head>
+<body>
+</body>
+</html>
